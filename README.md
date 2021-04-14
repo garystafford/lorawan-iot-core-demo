@@ -8,6 +8,6 @@ The source code for AWS Lambda function used to decode the device's binary messa
 
 ## Architecture
 
-The architecture of this post's demonstration.
+The major AWS resources used in this demonstration are shown in the architectural diagram, below.
 
 ![Architecture](./diagram/LoRaWAN_AWS_Core.png)
