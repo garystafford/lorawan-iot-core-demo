@@ -1,0 +1,73 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  AWS IoT Core for LoRaWAN
+Parameters:
+  ProjectName:
+    Type: String
+    MinLength: 1
+    Default: LoRaWAN IoT Core Analytics Demo
+    Description: Project name value used in 'Project' tag.
+Resources:
+    IAMManagedPolicy:
+        Type: "AWS::IAM::ManagedPolicy"
+        Properties:
+            ManagedPolicyName: !Ref IAMRole
+            Path: "/"
+            PolicyDocument: |
+                {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "iot:DescribeEndpoint",
+                                "iot:Publish"
+                            ],
+                            "Resource": "*"
+                        }
+                    ]
+                }
+    IAMRole:
+        Type: "AWS::IAM::Role"
+        Properties:
+            Path: "/"
+            RoleName: "AWSIoTCoreLoRaWANDestinations"
+            AssumeRolePolicyDocument: "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":[\"iot.amazonaws.com\",\"iotwireless.amazonaws.com\"]},\"Action\":\"sts:AssumeRole\",\"Condition\":{}}]}"
+            MaxSessionDuration: 3600
+            ManagedPolicyArns:
+              - !Sub "arn:aws:iam::${AWS::AccountId}:policy/AWSIoTCoreLoRaWANDestinations"
+    IoTWirelessDestination:
+        Type: "AWS::IoTWireless::Destination"
+        Properties:
+            Name: "SensorRuleLambda"
+            Description: "Send messages to IoT Rule that invokes binary converter."
+            Expression: "LoRaWANRuleWithDecoder_tbhv110_915"
+            ExpressionType: "RuleName"
+            RoleArn: !GetAtt IAMRole.Arn
+            Tags:
+              -
+                Key: "Owner"
+                Value: "gstafford"
+              -
+                Key: "Project"
+                Value: !Ref ProjectName
+    IoTWirelessServiceProfile:
+        Type: "AWS::IoTWireless::ServiceProfile"
+        Properties:
+            LoRaWAN:
+                AddGwMetadata: true
+    IoTWirelessDeviceProfile:
+        Type: "AWS::IoTWireless::DeviceProfile"
+        Properties:
+            Name: "OTAA"
+            LoRaWAN:
+                MacVersion: "1.0.3"
+                MaxDutyCycle: 10
+                MaxEirp: 10
+                RegParamsRevision: "RP002-1.0.1"
+                RfRegion: "US915"
+                Supports32BitFCnt: false
+                SupportsClassB: false
+                SupportsClassC: false
+                SupportsJoin: true
+

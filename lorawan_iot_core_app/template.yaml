@@ -1,0 +1,202 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  Sample SAM Template for LoRaWAN Decoder Rule LoRaWANDecoderFunctionRuleFunction
+Globals:
+  Function:
+    Timeout: 30
+
+Parameters:
+  ProjectName:
+    Type: String
+    MinLength: 1
+    Default: LoRaWAN IoT Core Analytics Demo
+    Description: Project name value used in 'Project' tag.
+  DecoderName:
+    Type: String
+    Default: tbhv110_915
+    Description: Name of decoder to use
+    AllowedValues:
+    - tbhv110_915
+  TopicOutgoingErrors:
+    Type: String
+    Default: lorawan/error
+    Description: MQTT topic name to publish errors during the AWS IoT Rule invocation
+  TopicOutgoingTransformedMessages:
+    Type: String
+    Default: lorawan/transformed
+    Description: MQTT topic name to publish transformed messages
+
+Resources:
+  TransformLoRaWANBinaryPayloadFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Name:
+      Fn::Sub: ${AWS::StackName}-TransformLoRaWANBinaryPayloadFunction
+    Properties:
+      CodeUri: lorawan_iot_core/
+      Handler: app.lambda_handler
+      Runtime: python3.8
+  TransformLoRaWANBinaryPayloadFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Fn::GetAtt:
+        - TransformLoRaWANBinaryPayloadFunction
+        - Arn
+      Action: lambda:InvokeFunction
+      Principal: iot.amazonaws.com
+  TransformLoRaWANBinaryPayloadRule:
+    Type: AWS::IoT::TopicRule
+    Properties:
+      RuleName:
+        Fn::Sub:
+        - LoRaWANRuleWithDecoder_${BinaryDecoderName}
+        - BinaryDecoderName:
+            Ref: DecoderName
+      TopicRulePayload:
+        AwsIotSqlVersion: '2016-03-23'
+        RuleDisabled: false
+        Sql: !Sub |
+          SELECT WirelessDeviceId, WirelessMetadata, "${DecoderName}" as PayloadDecoderName,
+                  aws_lambda("${TransformLoRaWANBinaryPayloadFunction.Arn}",
+                              {"PayloadDecoderName": "${DecoderName}",
+                               "PayloadData": PayloadData,
+                               "WirelessDeviceId": WirelessDeviceId,
+                               "WirelessMetadata": WirelessMetadata}) as PayloadData
+        Actions:
+        - Republish:
+            RoleArn:
+              Fn::GetAtt:
+              - TransformLoRaWANBinaryPayloadRuleActionRole
+              - Arn
+            Topic:
+              Fn::Join:
+              - ''
+              - - Ref: TopicOutgoingTransformedMessages
+            Qos: 0
+        - IotAnalytics:
+            ChannelName: !Ref IoTAnalyticsChannel
+            RoleArn: !GetAtt TransformLoRaWANBinaryPayloadRuleActionRole.Arn
+        ErrorAction:
+          Republish:
+            RoleArn:
+              Fn::GetAtt:
+              - TransformLoRaWANBinaryPayloadRuleActionRole
+              - Arn
+            Topic:
+              Ref: TopicOutgoingErrors
+            Qos: 0
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+  TransformLoRaWANBinaryPayloadRuleActionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - iot.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+      - PolicyName: iot
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: iot:Publish
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:aws:iot:'
+                - Ref: AWS::Region
+                - ':'
+                - Ref: AWS::AccountId
+                - :topic/*
+      - PolicyName: iotanalytics
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: iotanalytics:BatchPutMessage
+            Resource:
+              Fn::Join:
+              - ''
+              - - 'arn:aws:iotanalytics:'
+                - Ref: AWS::Region
+                - ':'
+                - Ref: AWS::AccountId
+                - :channel/*
+
+  IoTAnalyticsChannel:
+    Type: AWS::IoTAnalytics::Channel
+    Properties:
+      ChannelName: lorawan_iot_core_analytics_channel
+      RetentionPeriod:
+        Unlimited: false
+        NumberOfDays: 90
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+  IoTAnalyticsPipeline:
+    Type: AWS::IoTAnalytics::Pipeline
+    Properties:
+      PipelineName: lorawan_iot_core_analytics_pipeline
+      PipelineActivities:
+        - Channel:
+            Name: ChannelActivity
+            ChannelName: !Ref IoTAnalyticsChannel
+            Next: DatastoreActivity
+          Datastore:
+            Name: DatastoreActivity
+            DatastoreName: !Ref IoTAnalyticsDatastore
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+  IoTAnalyticsDatastore:
+    Type: AWS::IoTAnalytics::Datastore
+    Properties:
+      DatastoreName: lorawan_iot_core_analytics_data_store
+      RetentionPeriod:
+        Unlimited: false
+        NumberOfDays: 90
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+  IoTAnalyticsDataset:
+    Type: AWS::IoTAnalytics::Dataset
+    Properties:
+      Actions:
+        - ActionName: SqlAction
+          QueryAction:
+            SqlQuery: !Sub |
+              SELECT to_iso8601(date_parse(wirelessmetadata.lorawan."timestamp", '%Y-%m-%dT%H:%i:%SZ') AT TIME ZONE 'UTC') AS ts_utc,
+                     to_iso8601(date_parse(wirelessmetadata.lorawan."timestamp", '%Y-%m-%dT%H:%i:%SZ') AT TIME ZONE 'America/New_York') AS ts_local,
+                     wirelessdeviceid,
+                     payloaddata.battery,
+                     round(((payloaddata.boardtemp * 1.8) + 32), 2) AS board_temp,
+                     payloaddata.rh,
+                     round(((payloaddata.envtemp * 1.8) + 32), 2) AS env_temp,
+                     payloaddata.voc,
+                     payloaddata.iaq,
+                     payloaddata.eco2,
+                     wirelessmetadata.lorawan.gateways[1].rssi AS rssi,
+                     wirelessmetadata.lorawan.gateways[1].snr AS snr
+              FROM ${IoTAnalyticsDatastore}
+              WHERE payloaddecodername = 'tbhv110_915'
+                AND payloaddata IS NOT NULL
+              ORDER BY ts_local
+      DatasetName: lorawan_iot_core_analytics_data_set
+      RetentionPeriod:
+        Unlimited: false
+        NumberOfDays: 90
+      Triggers:
+        - Schedule:
+            ScheduleExpression: cron(0/15 * * * ? *)
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
