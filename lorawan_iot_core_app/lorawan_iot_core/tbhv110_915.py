@@ -16,7 +16,8 @@
 
 # Healthy Home Sensor IAQ (TBHV110) binary payload converter
 # Author: Gary A. Stafford
-# Date: 2021-04-09
+# Date: 2021-04-14
+# Reference: https://lora-alliance.org/wp-content/uploads/2020/05/RM_IAQ-Sensor_20200205_v2_with-downlink.pdf
 
 # | Bytes | Description                       |
 # |-------|-----------------------------------|
@@ -34,6 +35,8 @@
 
 import base64
 import json
+
+import helpers
 
 DEBUG_OUTPUT = False
 
