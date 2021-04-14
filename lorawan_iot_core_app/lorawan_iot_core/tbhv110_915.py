@@ -36,8 +36,6 @@
 import base64
 import json
 
-import helpers
-
 DEBUG_OUTPUT = False
 
 
@@ -62,33 +60,30 @@ def dict_from_payload(base64_input: str, fport: int = None):
     if DEBUG_OUTPUT:
         print(f"Input: {decoded.hex().upper()}")
 
-    # Byte 1, bit 0
+    # Byte 0, bit 0
     status = decoded[0] & 0b00000001  # (1 << 1) - 1
 
-    # Byte 2, bits 3:0
+    # Byte 1, bits 3:0
     battery = decoded[1] & 0b00001111  # (1 << 4) - 1
     battery = (25 + battery) / 10
 
-    # Byte 3, bits 6:0
+    # Byte 2, bits 6:0
     board_temp = decoded[2] & 0b01111111  # (1 << 7) - 1
     board_temp = board_temp - 32
 
-    # Byte 4, bits 6:0
+    # Byte 3, bits 6:0
     rh = decoded[3] & 0b01111111  # (1 << 7) - 1
 
-    # Byte 5-6, bits 15:0
+    # Byte 5-4, bits 15:0
     eco2 = decoded[5] << 8 | decoded[4]
-    eco2 = helpers.bin16dec(eco2)
 
-    # Byte 7-8, bits 15:0
+    # Byte 7-6, bits 15:0
     voc = decoded[7] << 8 | decoded[6]
-    voc = helpers.bin16dec(voc)
 
-    # Byte 9-10, bits 15:0
+    # Byte 9-8, bits 15:0
     iaq = decoded[9] << 8 | decoded[8]
-    iaq = helpers.bin16dec(iaq)
 
-    # Byte 11, bits 6:0
+    # Byte 10, bits 6:0
     env_temp = decoded[10] & 0b1111111  # (1 << 7) - 1
     env_temp = env_temp - 32
 
