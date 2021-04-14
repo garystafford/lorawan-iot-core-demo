@@ -1,6 +1,6 @@
-# AWS IoT Core for LoRaWAN, Amazon IoT Analytics, and Amazon QuickSight Demonstration
+# AWS IoT Core for LoRaWAN, AWS IoT Analytics, and Amazon QuickSight Demonstration
 
-Source code for the post, [AWS IoT Core for LoRaWAN, Amazon IoT Analytics, and Amazon QuickSight](https://garystafford.medium.com/).
+Source code for the post, [AWS IoT Core for LoRaWAN, AWS IoT Analytics, and Amazon QuickSight](https://garystafford.medium.com/aws-iot-core-for-lorawan-amazon-iot-analytics-and-amazon-quicksight-8387a73d056a).
 
 ## Lambda Binary Decoder Function
 
